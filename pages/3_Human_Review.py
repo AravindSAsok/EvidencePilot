@@ -29,6 +29,10 @@ st.set_page_config(
     layout="wide",
 )
 
+from startup_screen import show_startup_screen
+
+show_startup_screen("answer_audit")
+
 
 st.markdown(
     """

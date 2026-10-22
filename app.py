@@ -4,6 +4,7 @@ import html
 import json
 import os
 import re
+import time
 from collections import Counter
 from io import BytesIO
 from pathlib import Path
@@ -144,10 +145,144 @@ st.markdown(
         margin-bottom: 1.7rem;
     }
 
+    .ep-hero-tagline {
+        color: #DCE9E0 !important;
+        font-size: 1.28rem;
+        font-weight: 550;
+        letter-spacing: -0.025em;
+        line-height: 1.45;
+        margin-top: -0.65rem;
+        margin-bottom: 0.65rem;
+    }
+
     .ep-muted {
         color: #A8B3C0 !important;
         font-size: 0.84rem;
         line-height: 1.65;
+    }
+
+    .ep-splash {
+        position: relative;
+        overflow: hidden;
+        margin-top: 1.2rem;
+        padding: clamp(1.4rem, 4vw, 2.8rem);
+        background: linear-gradient(135deg, #141D27 0%, #101720 58%, #17251F 100%);
+        border: 1px solid #35414E;
+        border-radius: 14px;
+    }
+
+    .ep-splash:before {
+        content: "";
+        position: absolute;
+        width: 260px;
+        height: 260px;
+        right: -85px;
+        top: -110px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(166,200,177,.18) 0%, rgba(166,200,177,0) 70%);
+        pointer-events: none;
+    }
+
+    .ep-splash-kicker {
+        color: #A6C8B1 !important;
+        font-size: .72rem;
+        font-weight: 750;
+        letter-spacing: .15em;
+        text-transform: uppercase;
+    }
+
+    .ep-splash-title {
+        color: #F0F3F6 !important;
+        font-size: clamp(2rem, 5vw, 3.2rem);
+        line-height: 1.08;
+        font-weight: 700;
+        letter-spacing: -.055em;
+        margin: .7rem 0 .8rem;
+    }
+
+    .ep-splash-copy {
+        color: #A8B3C0 !important;
+        max-width: 660px;
+        font-size: 1rem;
+        line-height: 1.75;
+        margin-bottom: 1.35rem;
+    }
+
+    .ep-splash-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        color: #DCE9E0 !important;
+        background: rgba(166,200,177,.08);
+        border: 1px solid rgba(166,200,177,.25);
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: .78rem;
+        font-weight: 600;
+    }
+
+    .ep-pulse-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #A6C8B1;
+        box-shadow: 0 0 0 0 rgba(166,200,177,.5);
+        animation: ep-pulse 1.8s infinite;
+    }
+
+    @keyframes ep-pulse {
+        0% { box-shadow: 0 0 0 0 rgba(166,200,177,.48); }
+        70% { box-shadow: 0 0 0 7px rgba(166,200,177,0); }
+        100% { box-shadow: 0 0 0 0 rgba(166,200,177,0); }
+    }
+
+    .ep-feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 1rem;
+    }
+
+    .ep-feature-card {
+        min-height: 145px;
+        padding: 1.1rem;
+        background: #141B23;
+        border: 1px solid #2B3540;
+        border-radius: 9px;
+    }
+
+    .ep-feature-icon {
+        display: inline-flex;
+        width: 34px;
+        height: 34px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: rgba(166,200,177,.12);
+        color: #A6C8B1;
+        font-size: 1rem;
+        margin-bottom: .75rem;
+    }
+
+    .ep-feature-title {
+        color: #E8EDF2 !important;
+        font-size: .94rem;
+        font-weight: 650;
+        margin-bottom: .35rem;
+    }
+
+    .ep-feature-copy {
+        color: #A8B3C0 !important;
+        font-size: .8rem;
+        line-height: 1.6;
+        margin: 0;
+    }
+
+    .ep-splash-note {
+        color: #8996A5 !important;
+        font-size: .76rem;
+        line-height: 1.6;
+        margin-top: 1rem;
     }
 
     .ep-source,
@@ -275,6 +410,11 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+from startup_screen import show_startup_screen
+
+# The fixed overlay hides the entire page while the branded screen is shown.
+show_startup_screen("home")
 
 
 def get_api_key():
@@ -614,7 +754,7 @@ with st.sidebar:
             <span class="ep-brand-mark">EP</span>EvidencePilot
         </div>
         <div class="ep-muted" style="margin-top:8px;">
-            Research workspace
+            Research, grounded in evidence.
         </div>
         <hr class="ep-divider">
         <div class="ep-section-label">About this workspace</div>
@@ -638,13 +778,13 @@ with st.sidebar:
 # Main workspace and upload
 # -------------------------------------------------------------------
 
-st.markdown('<div class="ep-eyebrow">DOCUMENT RESEARCH</div>', unsafe_allow_html=True)
-st.title("Evidence workspace")
+st.markdown('<div class="ep-eyebrow">RESEARCH WORKSPACE</div>', unsafe_allow_html=True)
+st.title("EvidencePilot")
 st.markdown(
     """
+    <div class="ep-hero-tagline">Research, Grounded in Evidence.</div>
     <div class="ep-subtitle">
-        Explore a document, retrieve relevant passages, and develop answers
-        with page-level source references.
+        Explore documents. Investigate claims. Trace every insight back to its source.
     </div>
     """,
     unsafe_allow_html=True,
@@ -663,18 +803,41 @@ with upload_column:
 if uploaded_file is None:
     st.markdown(
         """
-        <div class="ep-empty">
-            <div class="ep-section-label">NO SOURCE SELECTED</div>
-            <h3>Start with a research document</h3>
-            <p class="ep-muted">
-                Upload a PDF above. EvidencePilot will extract the text and
-                make its passages searchable.
+        <section class="ep-splash">
+            <div class="ep-splash-kicker">YOUR RESEARCH WORKSPACE</div>
+            <div class="ep-splash-title">Better questions.<br>Stronger evidence.</div>
+            <p class="ep-splash-copy">
+                EvidencePilot helps you explore research documents, retrieve relevant
+                passages, and inspect the evidence behind AI-generated answers — all
+                in one focused workspace.
             </p>
-            <hr class="ep-divider">
-            <p class="ep-muted">
-                Scanned documents require OCR, which is not included yet.
-            </p>
+            <div class="ep-splash-status">
+                <span class="ep-pulse-dot"></span>
+                Ready when you are · Upload a PDF to begin
+            </div>
+        </section>
+        <div class="ep-feature-grid">
+            <article class="ep-feature-card">
+                <div class="ep-feature-icon">⌕</div>
+                <div class="ep-feature-title">Find relevant passages</div>
+                <p class="ep-feature-copy">Explore source text with keyword retrieval or semantic search.</p>
+            </article>
+            <article class="ep-feature-card">
+                <div class="ep-feature-icon">↗</div>
+                <div class="ep-feature-title">Trace answers to sources</div>
+                <p class="ep-feature-copy">Inspect retrieved evidence and check whether cited pages are available.</p>
+            </article>
+            <article class="ep-feature-card">
+                <div class="ep-feature-icon">✓</div>
+                <div class="ep-feature-title">Evaluate retrieval quality</div>
+                <p class="ep-feature-copy">Compare search methods against manually verified supporting pages.</p>
+            </article>
         </div>
+        <p class="ep-splash-note">
+            Built for evidence-led exploration. AI outputs can be wrong, so review the
+            original passages before relying on a conclusion. Text-based PDFs up to
+            20 MB are supported; scanned PDFs need OCR, which is not included yet.
+        </p>
         """,
         unsafe_allow_html=True,
     )

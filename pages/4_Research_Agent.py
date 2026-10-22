@@ -40,6 +40,10 @@ st.set_page_config(
     layout="wide",
 )
 
+from startup_screen import show_startup_screen
+
+show_startup_screen("answer_audit")
+
 st.markdown(
     """
     <style>
@@ -841,6 +845,30 @@ def validate_report_citations(report, evidence):
     }
 
 
+def mark_unsupported_report_citations(report, citation_check):
+    """Clearly label page citations not represented in retrieved evidence."""
+
+    unsupported_pages = set(
+        citation_check.get("unsupported_page_references", [])
+    )
+
+    if not unsupported_pages:
+        return report
+
+    def replace_citation(match):
+        page = int(match.group(1))
+        if page in unsupported_pages:
+            return f"[UNVERIFIED CITATION: p. {page}]"
+        return match.group(0)
+
+    return re.sub(
+        r"\[p\.\s*(\d+)\]",
+        replace_citation,
+        report,
+        flags=re.IGNORECASE,
+    )
+
+
 # --------------------------------------------------
 # Full agent workflow
 # --------------------------------------------------
@@ -1589,7 +1617,12 @@ if result:
         # ------------------------------------------
 
         st.markdown("#### 7. Final research report")
-        st.markdown(result["report"])
+        citation_check = result["citation_check"]
+        display_report = mark_unsupported_report_citations(
+            result["report"],
+            citation_check,
+        )
+        st.markdown(display_report)
 
         gaps = result["synthesis"].get("key_gaps", [])
 
@@ -1600,8 +1633,6 @@ if result:
                 st.markdown(f"- {gap}")
 
         st.markdown("#### Citation checks")
-
-        citation_check = result["citation_check"]
 
         if citation_check["unsupported_page_references"]:
             st.warning(
@@ -1637,7 +1668,7 @@ if result:
             f"{result['embedding_model'] or 'Not used'}\n\n"
             f"**Retrieval strategy:** {result['selected_method']}\n\n"
             f"**Research goal:** {result['research_goal']}\n\n"
-            f"{result['report']}\n\n"
+            f"{display_report}\n\n"
             "## Evidence gaps\n\n"
             + (
                 "\n".join(f"- {gap}" for gap in gaps)
@@ -1646,8 +1677,10 @@ if result:
             )
         )
 
+        downloadable_result = dict(result)
+        downloadable_result["report"] = display_report
         report_json = json.dumps(
-            result,
+            downloadable_result,
             ensure_ascii=False,
             indent=2,
         )
