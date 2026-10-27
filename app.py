@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+import uuid
 from collections import Counter
 from io import BytesIO
 from pathlib import Path
@@ -14,6 +15,7 @@ import streamlit as st
 from google import genai
 from google.genai import types
 from pypdf import PdfReader
+from supabase import create_client
 
 
 MODEL = "gemini-3.5-flash-lite"
@@ -416,6 +418,58 @@ from startup_screen import show_startup_screen
 # The fixed overlay hides the entire page while the branded screen is shown.
 show_startup_screen("home")
 
+# -------------------------------------------------------------------
+# Persistent document storage (single-user workspace; no login)
+# -------------------------------------------------------------------
+
+STORAGE_BUCKET = "evidencepilot-documents"
+
+
+def get_supabase_config():
+    url = os.getenv("SUPABASE_URL", "").strip()
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+    if not url:
+        try:
+            url = str(st.secrets.get("SUPABASE_URL", "")).strip()
+        except Exception:
+            url = ""
+
+    if not key:
+        try:
+            key = str(st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")).strip()
+        except Exception:
+            key = ""
+
+    return url, key
+
+
+def get_storage_client():
+    url, key = get_supabase_config()
+    if not url or not key:
+        return None
+    try:
+        return create_client(url, key)
+    except Exception:
+        return None
+
+
+def safe_storage_filename(filename):
+    name = Path(filename).name
+    name = re.sub(r"[^A-Za-z0-9._ -]", "_", name).strip(" .")
+    return name or "document.pdf"
+
+
+def list_saved_pdfs(storage_client):
+    items = storage_client.storage.from_(STORAGE_BUCKET).list()
+    saved = []
+    for item in items or []:
+        name = item.get("name", "") if isinstance(item, dict) else getattr(item, "name", "")
+        if name and name.lower().endswith(".pdf"):
+            display_name = name.split("__", 1)[1] if "__" in name else name
+            saved.append({"path": name, "display_name": display_name})
+    return sorted(saved, key=lambda item: item["display_name"].lower())
+
 
 def get_api_key():
     key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -748,6 +802,8 @@ def evaluate_ranking(results, expected_pages):
 # -------------------------------------------------------------------
 
 with st.sidebar:
+    st.caption("Single-user research workspace")
+
     st.markdown(
         """
         <div class="ep-brand">
@@ -790,68 +846,117 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+storage_client = get_storage_client()
+if storage_client is None:
+    st.error("Document storage is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to your environment or .streamlit/secrets.toml.")
+    st.stop()
+
 left, upload_column, right = st.columns([1, 2, 1])
 
 with upload_column:
-    st.markdown('<div class="ep-section-label">SOURCE DOCUMENT</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ep-section-label">ADD A SOURCE DOCUMENT</div>', unsafe_allow_html=True)
     uploaded_file = st.file_uploader(
         "Upload a research PDF",
         type=["pdf"],
-        help="Text-based PDFs up to 20 MB. Scanned PDFs are not supported yet.",
+        help="Text-based PDFs up to 20 MB. Saved PDFs remain available until you delete them.",
+        key="new_pdf_upload",
     )
+    if uploaded_file is not None:
+        if st.button("Save PDF to my library", type="primary", use_container_width=True):
+            file_bytes = uploaded_file.getvalue()
+            if len(file_bytes) > MAX_FILE_SIZE:
+                st.error("This version supports PDF files up to 20 MB.")
+            else:
+                safe_name = safe_storage_filename(uploaded_file.name)
+                storage_path = f"{uuid.uuid4().hex}__{safe_name}"
+                try:
+                    with st.spinner("Saving PDF to your document library..."):
+                        storage_client.storage.from_(STORAGE_BUCKET).upload(
+                            storage_path,
+                            file_bytes,
+                            file_options={"content-type": "application/pdf", "upsert": "false"},
+                        )
+                    st.success(f"Saved {safe_name} to your library.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not save the PDF. Confirm the '{STORAGE_BUCKET}' bucket exists and the service-role key is correct.")
 
-if uploaded_file is None:
+try:
+    saved_pdfs = list_saved_pdfs(storage_client)
+except Exception:
+    st.error(f"Could not list saved PDFs. Make sure the private '{STORAGE_BUCKET}' bucket exists in Supabase Storage.")
+    st.stop()
+
+if not saved_pdfs:
     st.markdown(
         """
         <section class="ep-splash">
             <div class="ep-splash-kicker">YOUR RESEARCH WORKSPACE</div>
             <div class="ep-splash-title">Better questions.<br>Stronger evidence.</div>
             <p class="ep-splash-copy">
-                EvidencePilot helps you explore research documents, retrieve relevant
-                passages, and inspect the evidence behind AI-generated answers — all
-                in one focused workspace.
+                Save PDFs to your library once, then open them whenever you return.
+                Files stay in storage until you explicitly delete them.
             </p>
-            <div class="ep-splash-status">
-                <span class="ep-pulse-dot"></span>
-                Ready when you are · Upload a PDF to begin
-            </div>
+            <div class="ep-splash-status"><span class="ep-pulse-dot"></span>No saved PDFs yet · Add one above</div>
         </section>
         <div class="ep-feature-grid">
-            <article class="ep-feature-card">
-                <div class="ep-feature-icon">⌕</div>
-                <div class="ep-feature-title">Find relevant passages</div>
-                <p class="ep-feature-copy">Explore source text with keyword retrieval or semantic search.</p>
-            </article>
-            <article class="ep-feature-card">
-                <div class="ep-feature-icon">↗</div>
-                <div class="ep-feature-title">Trace answers to sources</div>
-                <p class="ep-feature-copy">Inspect retrieved evidence and check whether cited pages are available.</p>
-            </article>
-            <article class="ep-feature-card">
-                <div class="ep-feature-icon">✓</div>
-                <div class="ep-feature-title">Evaluate retrieval quality</div>
-                <p class="ep-feature-copy">Compare search methods against manually verified supporting pages.</p>
-            </article>
+            <article class="ep-feature-card"><div class="ep-feature-icon">⌕</div><div class="ep-feature-title">Find relevant passages</div><p class="ep-feature-copy">Explore source text with keyword retrieval or semantic search.</p></article>
+            <article class="ep-feature-card"><div class="ep-feature-icon">↗</div><div class="ep-feature-title">Trace answers to sources</div><p class="ep-feature-copy">Inspect retrieved evidence and cited pages.</p></article>
+            <article class="ep-feature-card"><div class="ep-feature-icon">✓</div><div class="ep-feature-title">Evaluate retrieval quality</div><p class="ep-feature-copy">Compare search methods against verified supporting pages.</p></article>
         </div>
-        <p class="ep-splash-note">
-            Built for evidence-led exploration. AI outputs can be wrong, so review the
-            original passages before relying on a conclusion. Text-based PDFs up to
-            20 MB are supported; scanned PDFs need OCR, which is not included yet.
-        </p>
         """,
         unsafe_allow_html=True,
     )
     st.stop()
 
-pdf_bytes = uploaded_file.getvalue()
+file_labels = [f"{item['display_name']}" for item in saved_pdfs]
+label_to_item = {f"{item['display_name']}  ·  {item['path'][:8]}": item for item in saved_pdfs}
+selected_label = st.selectbox(
+    "Open a saved PDF",
+    options=list(label_to_item.keys()),
+    key="saved_pdf_selection",
+)
+selected_item = label_to_item[selected_label]
+
+manage_col, delete_col = st.columns([4, 1])
+with manage_col:
+    st.caption(f"{len(saved_pdfs)} PDF(s) saved in your library")
+with delete_col:
+    if st.button("Delete selected", use_container_width=True):
+        try:
+            storage_client.storage.from_(STORAGE_BUCKET).remove([selected_item["path"]])
+            for key in ("pdf_hash", "pdf_name", "pdf_pages", "pdf_total_pages", "pdf_chunks", "embedding_matrix", "embedding_hash", "answer_bundle", "eval_results", "eval_cases", "eval_import_digest", "evaluation_import"):
+                st.session_state.pop(key, None)
+            st.success(f"Deleted {selected_item['display_name']}.")
+            st.rerun()
+        except Exception:
+            st.error("Could not delete this PDF from Supabase Storage.")
+
+selected_path = selected_item["path"]
+selected_name = selected_item["display_name"]
+if st.session_state.get("loaded_storage_path") != selected_path or "loaded_pdf_bytes" not in st.session_state:
+    try:
+        with st.spinner(f"Opening {selected_name}..."):
+            downloaded = storage_client.storage.from_(STORAGE_BUCKET).download(selected_path)
+        st.session_state["loaded_pdf_bytes"] = bytes(downloaded)
+        st.session_state["loaded_storage_path"] = selected_path
+        st.session_state["loaded_pdf_name"] = selected_name
+    except Exception:
+        st.error("Could not download this saved PDF from Supabase Storage.")
+        st.stop()
+
+pdf_bytes = st.session_state["loaded_pdf_bytes"]
+
+
 
 if len(pdf_bytes) > MAX_FILE_SIZE:
     st.error("This version supports PDF files up to 20 MB.")
     st.stop()
 
 file_hash = hashlib.sha256(pdf_bytes).hexdigest()
+file_identity = f"{selected_path}:{file_hash}"
 
-if st.session_state.get("pdf_hash") != file_hash:
+if st.session_state.get("pdf_hash") != file_identity:
     for key in (
         "embedding_matrix", "embedding_hash", "answer_bundle",
         "pdf_pages", "pdf_chunks", "eval_results",
@@ -868,8 +973,8 @@ if st.session_state.get("pdf_hash") != file_hash:
 
         chunks = create_chunks(pages)
 
-        st.session_state["pdf_hash"] = file_hash
-        st.session_state["pdf_name"] = uploaded_file.name
+        st.session_state["pdf_hash"] = file_identity
+        st.session_state["pdf_name"] = selected_name
         st.session_state["pdf_pages"] = pages
         st.session_state["pdf_total_pages"] = total_pages
         st.session_state["pdf_chunks"] = chunks
@@ -912,7 +1017,7 @@ st.info(
 )
 
 embedding_ready = (
-    st.session_state.get("embedding_hash") == file_hash
+    st.session_state.get("embedding_hash") == file_identity
     and st.session_state.get("embedding_matrix") is not None
 )
 
@@ -947,7 +1052,7 @@ if not embedding_ready:
                 )
 
                 st.session_state["embedding_matrix"] = matrix
-                st.session_state["embedding_hash"] = file_hash
+                st.session_state["embedding_hash"] = file_identity
                 st.rerun()
 
             except Exception:
@@ -1238,7 +1343,7 @@ with st.expander("Create or load evaluation cases", expanded=True):
 
 cases = st.session_state.get("eval_cases", [])
 embedding_ready = (
-    st.session_state.get("embedding_hash") == file_hash
+    st.session_state.get("embedding_hash") == file_identity
     and st.session_state.get("embedding_matrix") is not None
 )
 
