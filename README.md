@@ -1,3 +1,6 @@
+<p align="center"><strong>Research, grounded in evidence. Inspect sources, audit claims, and keep humans in the loop.</strong></p>
+<p align="center"><img alt="Python" src="https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white" /> <img alt="Streamlit" src="https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white" /> <img alt="Google Gemini" src="https://img.shields.io/badge/Google%20Gemini-8E75B2?logo=googlegemini&logoColor=white" /> <img alt="NumPy" src="https://img.shields.io/badge/NumPy-013243?logo=numpy&logoColor=white" /> <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white" /></p>
+
 # EvidencePilot — Research, Grounded in Evidence.
 
 <p align="center">
@@ -229,6 +232,22 @@ EvidencePilot is hosted on Streamlit Community Cloud.
 The deployment uses the GitHub repository as its source, with `app.py` as the main entry point. Required credentials should be configured through the platform's secrets settings rather than committed to source control.
 
 To deploy your own instance, see the [official Streamlit Community Cloud deployment guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app).
+
+## Evidence workflow
+
+~~~mermaid
+flowchart TD
+  PDF[Uploaded PDF] --> EX[Text extraction and page mapping]
+  EX --> CH[Chunking and indexing]
+  Q[Research question] --> RET[Keyword and semantic retrieval]
+  CH --> RET
+  RET --> QA[Gemini grounded answer]
+  QA --> CIT[Page-aware citations]
+  CIT --> AUD[Answer and claim audit]
+  AUD --> HUMAN[Human review]
+~~~
+
+The model output is a research aid, not a verified conclusion. Inspect the retrieved passages and original document before relying on any claim.
 
 ## ⚠️ Limitations and Responsible Use
 
